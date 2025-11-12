@@ -1,0 +1,42 @@
+repos:
+  # --- Jupyter notebooks: strip outputs so diffs stay clean
+  - repo: https://github.com/kynan/nbstripout
+    rev: 0.7.1
+    hooks:
+      - id: nbstripout
+
+  # --- Run linters/formatters on notebooks via nbQA
+  - repo: https://github.com/nbQA-dev/nbQA
+    rev: 1.9.0
+    hooks:
+      - id: nbqa-ruff
+        args : ["--fix"]
+        additional_dependencies: ["ruff==0.6.8"]
+      - id: nbqa-mypy
+        args: ["--config-file=./pyproject.toml"]
+        additional_dependencies:
+          - mypy==1.11.2
+          - pandas-stubs
+          - matplotlib
+          - seaborn
+          - scipy
+          - scikit-learn
+          - types-seaborn
+          - scipy-stubs
+          - types-tqdm
+          - xgboost
+
+  # --- Python: Ruff (lint + fast formatter)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.6.8
+    hooks:
+      - id: ruff           # lint
+      - id: ruff-format    # format
+
+  # --- Python: type-checking
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.11.2
+    hooks:
+      - id: mypy
+        additional_dependencies:
+          - types-requests
