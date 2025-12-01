@@ -25,6 +25,7 @@ repos:
           - scipy-stubs
           - types-tqdm
           - xgboost
+          - torch
 
   # --- Python: Ruff (lint + fast formatter)
   - repo: https://github.com/astral-sh/ruff-pre-commit
