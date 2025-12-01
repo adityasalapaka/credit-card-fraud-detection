@@ -19,6 +19,7 @@ Start with the full write-up: [credit-card-fraud-detection.md](credit-card-fraud
 | MLP | 0.8409 |
 
 ![](results/deep_learning/precision_recall_curve___test_set___v14_vs_classic_ml_baselines_vs_deep_learning.png)
+![](results/deep_learning/model_comparison_on_test_set.png)
 ## Quick Start
 
 Prereqs: Python 3.11–3.12, Git.
