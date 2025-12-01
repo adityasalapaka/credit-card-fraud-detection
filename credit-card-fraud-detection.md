@@ -517,4 +517,176 @@ Finally, we evaluate all our models on the test set to ensure that their perform
 ## Summary
 We cleaned up an imbalanced dataset with fraudulent credit card transactions by log-transforming Amount and adding temporal intelligence to Time. We established a baseline average precision score of 0.61 (on the validation set) using the best dataset feature available. Further, we implemented three classic machine learning models - logistic regression learnt a linear relationship and random forest and XGBoost learnt a non-linear relationship. We netted out with an average precision score of 0.864, a significant improvement from the 0.567 exhibited by the V14 feature on the test set. We could've squeezed more out of the XGBoost model by doing a more exhaustive grid search on parameters, but we were limited by technological constraints.
 
+# Deep Learning
+It's going to be really hard to beat XGBoost on a tabular dataset but we'll attempt to do so anyway. We'll try building a simple feedforward neural network to establish a deep learning baseline and go from there.
+## 1-Layer
+We'll start a simple feedforward neural network. We have two simple layers: a layer with 32 neurons and an activation function in the form of a rectified linear unit (ReLU). The activation function enhances our neural net by taking it from a simplistic linear model to a non-linear one able to model more complex relationships.
+
+```mermaid
+graph TD
+    A[Input Layer<br>30 features] --> B[Dense 32 + ReLU]
+    B --> C[Dense 1]
+```
+
+We're using binary cross-entropy as our loss function, which is the same as minimizing the log-loss function from logistic regression above. The difference is the presence of hidden layers (like ReLU and others which we'll add later). You can think of logistic regression as a special case of a feedforward neural network.
+
+The output of our model is a single logit that gets converted to a probability to predict the probability of the class (fraud vs non-fraud). Finally, we also apply `pos_weight` to balance out the imbalanced class.
+
+Training this neural network for 50 epochs produces... substandard results.
+
+```python
+# MLP v0 with pos_weights
+model = CreditCardFraudModel(input_dim=X_train.shape[1])
+criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+
+result_v0 = train_and_evaluate_model(
+    name="MLP_v0_pos_weights",
+    model=model,
+    criterion=criterion,
+    optimizer=optimizer,
+    train_loader=train_loader,
+    X_val_tensor=X_validation_tensor,
+    y_val_np=y_validation_np,
+    num_epochs=50,
+)
+
+experiments[result_v0["name"]] = {
+    "val_aps": result_v0["val_aps"],
+    "final_train_loss": result_v0["train_losses"][-1],
+    "final_val_loss": result_v0["val_losses"][-1],
+}
+
+trained_models[result_v0["name"]] = result_v0["model"]
+
+# results
+print(f"Experiment: {result_v0['name']}")
+print(f"Validation APS: {result_v0['val_aps']:.4f}")
+plot_loss_curves(
+    result_v0["train_losses"],
+    result_v0["val_losses"],
+    title=f"{result_v0['name']} Loss Curves | APS: {result_v0['val_aps']:.4f}",
+)
+```
+
+![](results/deep_learning/mlp_v0_pos_weights_loss_curves.png)
+
+The loss should decline indicating that the model is learning, but it stays constant. The model is not learning at all. Given that our simple NN is just a slight advancement over logistic regression, we'd expect performance similar to logistic regression.
+
+Let's see what happens when we turn off the class imbalance.
+
+```python
+criterion = nn.BCEWithLogitsLoss(pos_weight=None)
+```
+
+![](results/deep_learning/mlp_v0_1_without_pos_weights_loss_curves.png)
+
+That's much better! The loss has declined and settled over 50 epochs. This model generated an average precision score of **0.8347** which is better than the model which accounted for class imbalance and logistic regression, but worse than random forest This goes against expectations (that accounting for class weights performs works) but here's some theories:
+
+- The model is learning "easy" frauds.
+- Our neural net is too small and is easily destabilized by penalizing class imbalance
+- We're optimizing for binary cross-entropy but evaluating in area under the precision-recall curve. PRC ignores accuracy and does not account for true negatives, so even if our model gets a few "easy" frauds right, it'll get a high score.
+
+Regardless, we have a nice NN baseline now. We'll continue building on top of this and try to beat 0.8347.
+## 2-Layer
+
+Let's make the net denser by adding another layer.
+
+```mermaid
+graph TD
+    A[Input Layer<br>30 features] --> B[Dense 32 + ReLU]
+    B --> C[Dense 32 + ReLU]
+    C --> D[Dense 1]
+```
+
+The loss curves are unexpected! It seems like while training loss is decreasing, validation loss is *increasing*. This hints at our model overfitting on the training data so it performs poorly on the validation set.
+
+![](results/deep_learning/mlp_v1_without_pos_weights_loss_curves.png)
+
+Let's start tuning this. Maybe the model is learning too fast, so let's decrease the learning rate from 0.001 to 0.0001.
+
+![](results/deep_learning/mlp_v1_1_without_pos_weights_loss_curves.png)
+
+That does look much better! The validation loss is generally declining (at least it's not increasing) but it's still a bit noisy. Let's tune this further to fix the overfitting. I'll add some regularization by introducing a dropout layer.
+### Regularization with dropout
+
+```mermaid
+graph TD
+    A[Input Layer<br>30 features] --> B[Dense 32 + ReLU]
+    B --> C[Dense 32 + ReLU]
+    C --> D[Dropout 0.3]
+    D --> E[Dense 1]
+```
+
+Training this model gives us a better looking curve.
+
+![](results/deep_learning/mlp_v1_2_without_pos_weights_loss_curves.png)
+
+The validation loss looks less noisy here, meaning we're doing better on overfitting. This model generates an average precision score of **0.8845** which improves on our baseline MLP.
+
+We're pretty close to XGBoost's score of 0.9112 (a gap of 0.02). We've tried deepening the model, let's also try widening it.
+
+## 3-Layer
+```mermaid
+graph TD
+    A[Input Layer<br>30 features] --> B[Dense 64 + ReLU]
+    B --> C[Dense 32 + ReLU]
+    C --> D[Dropout 0.3]
+    D --> E[Dense 16 + ReLU]
+    E --> F[Dense 1]
+```
+
+The dropout worked well for us so let's keep that to prevent overfitting. I've also kept the learning rate constant at 0.0001.
+
+![](results/deep_learning/mlp_v2_without_pos_weights_loss_curves.png)
+
+This gives us an average precision score of **0.8712** which is a *slight* regression over our 2-layer, but not by much. The validation loss looks noisier now, so let's increase the dropout rate to fix overfitting.
+
+
+```mermaid
+graph TD
+    A[Input Layer<br>30 features] --> B[Dense 64 + ReLU]
+    B --> C[Dense 32 + ReLU]
+    C --> D[Dropout 0.5]
+    D --> E[Dense 16 + ReLU]
+    E --> F[Dense 1]
+```
+
+This helps in overfitting (as the validation noise seems less noisy), but it decreases average precision score slightly to **0.8676**.
+
+![](results/deep_learning/mlp_v2_1_without_pos_weights_loss_curves.png)
+
+I fear the dropout was too aggressive so let's not do that. However I am worried about overfitting because we haven't accounted for class imbalance at all. Let's add a blunted imbalance penalty: the square-root of the positive/negative ratio.
+
+```python
+criterion_v2_2 = nn.BCEWithLogitsLoss(pos_weight=torch.sqrt(pos_weight))
+```
+
+![](results/deep_learning/mlp_v2_2_with_sqrt_pos_weights_loss_curves.png)
+
+These curves look better but the average precision score fell to **0.8334**.
+
+Let's try setting the `pos_weight` to be a tenth of the square root. This works out to $\approx$ 2.40.
+
+![](results/deep_learning/mlp_v2_3_with_one_tenth_sqrt_pos_weights_loss_curves.png)
+
+The validation curve looks better and the score has improved to **0.8679**, but not enough to beat `MLP_v1.2`.
+
+Our best model from this exercise seems to be `MLP_v1.2`.
+## Results
+Let's compare the APS across experiments. We see that the best model is `MLP_v1.2`.
+
+![](results/deep_learning/deep_learning_model_comparison_on_validation_set.png)
+
+Here's how MLP stacks up against our baseline ML models. You can see that it comes close to tree-based models, but cannot beat it.
+
+![](results/deep_learning/model_comparison_on_validation_set.png)
+
+And finally, here's the test set evaluation.
+
+![](results/deep_learning/model_comparison_on_test_set.png)
+## Summary
+
+We've reached diminishing returns in our deep learning implementation here. Despite adding depth, width and regularization, we cannot seem to beat tree-based models. Tree-based models are dominant on tabular data. XGBoost remains the benchmark to beat, when we start implementing LLMs next.
+
 [^1]: MLG says we should prefer AUPRC over AUROC because of the class imbalance, however McDermott et. al. [argue](https://arxiv.org/abs/2401.06091) that this widely-held assumption may not actually be true. Nevertheless, we take MLG's recommendation.

@@ -13,12 +13,12 @@ Start with the full write-up: [credit-card-fraud-detection.md](credit-card-fraud
 
 | Model | PR-AUC |
 | :---: | :---: | 
-| Logistic Regression |0.764  |
-| Random Forest |0.869|
-| XGBoost |0.911|
+| Logistic Regression |0.6681  |
+| Random Forest |0.8637|
+| XGBoost |0.8567|
+| MLP | 0.8409 |
 
-![](results/ml_baselines/precision_recall_curve___test_set___v14_vs_classic_ml_baselines.png)
-
+![](results/deep_learning/precision_recall_curve___test_set___v14_vs_classic_ml_baselines_vs_deep_learning.png)
 ## Quick Start
 
 Prereqs: Python 3.11–3.12, Git.
